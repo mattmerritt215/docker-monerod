@@ -1,25 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${PUID:=12200}"
-: "${PGID:=12200}"
-: "${MONERO_DATA:=/data}"
-: "${MONERO_CONF:=/etc/monero/bitmonero.conf}"
+: "${MONERO_DATA:=/var/lib/monero}"
 
-if ! getent group monero >/dev/null; then
-	addgroup --gid "$PGID" monero || true
+if [ "${1:-}" != "" ] && [ "${1#-}" != "$1" ]; then
+	set -- monerod "$@"
 fi
 
-if ! id monero >/dev/null 2>&1; then
-	adduser --disabled-password --gecos "" --uid "$PUID" --gid "$PGID" -s /usr/sbin/nologin monero || true
+if [ "$(id -u)" = "0" ]; then
+	mkdir -p "$MONERO_DATA"
+	chown -R monero:monero "$MONERO_DATA" 2>/dev/null || true
+
+	case "${1:-}" in
+		monerod|monero-wallet-rpc|monero-wallet-cli)
+			exec gosu monero "$@"
+			;;
+		*)
+			exec "$@"
+			;;
+	esac
 fi
 
-mkdir -p "$MONERO_DATA" || true
-chown -R monero:monero "$MONERO_DATA" || true
-chmod -R 700 "$MONERO_DATA" || true
+exec "$@"
 
-if [[ "${1:-}" == "monerod" ]]; then
-  exec gosu monero "$@" --non-interactive --config-file="$MONERO_CONF" --data-dir="$MONERO_DATA"
-fi
 
-exec gosu monero "$@"
